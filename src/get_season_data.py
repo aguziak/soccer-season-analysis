@@ -36,13 +36,13 @@ def _flatten_response(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def get_season_data(season: int, league: str) -> pd.DataFrame:
+def get_season_data(season: int, league_id: int) -> pd.DataFrame:
     """
     Gets the historical data for a given season and soccer league
 
     Args:
         season (int): Season for which to get data
-        league (str): League for which to get data
+        league_id (str): League for which to get data
 
     Returns:
         DataFrame: Historical data for the league in the given season
@@ -52,7 +52,7 @@ def get_season_data(season: int, league: str) -> pd.DataFrame:
 
     url = "https://api-football-v1.p.rapidapi.com/v3/fixtures"
 
-    querystring = {"league": "39", "season": "2020", "from": "2021-01-01", "to": "2021-04-07"}
+    querystring = {"league": epl_league_id, "season": season}
 
     headers = {
         'x-rapidapi-host': "api-football-v1.p.rapidapi.com",
@@ -69,4 +69,6 @@ def get_season_data(season: int, league: str) -> pd.DataFrame:
 
 
 if __name__ == '__main__':
-    result = get_season_data(2020, 'epl')
+    epl_league_id = 39
+    result = get_season_data(2019, epl_league_id)
+    print(result.head())
