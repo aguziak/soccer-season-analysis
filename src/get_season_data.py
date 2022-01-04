@@ -36,18 +36,30 @@ def _flatten_response(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def get_season_data(season: int, league_id: int) -> pd.DataFrame:
+def get_season_data(season: int, league_id: int, use_cache=False) -> pd.DataFrame:
     """
     Gets the historical data for a given season and soccer league
 
     Args:
         season (int): Season for which to get data
         league_id (str): League for which to get data
+        use_cache (bool): Whether to use local cache or not
 
     Returns:
         DataFrame: Historical data for the league in the given season
 
     """
+    cache_dir = os.path.abspath(f'../local_cache/')
+    cache_file_path = f'{cache_dir}/league_{league_id}_season_{season}.csv'
+
+    if use_cache:
+        print('Retrieving data from local cache')
+        file_already_exists = os.path.exists(cache_file_path)
+
+        if file_already_exists:
+            return pd.read_csv(cache_file_path)
+
+    print('Retrieving data from API')
     api_key = _get_rapid_api_key()
 
     url = "https://api-football-v1.p.rapidapi.com/v3/fixtures"
@@ -65,10 +77,15 @@ def get_season_data(season: int, league_id: int) -> pd.DataFrame:
 
     df = _flatten_response(df)
 
+    if use_cache:
+        print('Saving data to local cache')
+        os.makedirs(cache_dir, exist_ok=True)
+        df.to_csv(cache_file_path)
+
     return df
 
 
 if __name__ == '__main__':
     epl_league_id = 39
-    result = get_season_data(2019, epl_league_id)
+    result = get_season_data(2018, epl_league_id)
     print(result.head())
