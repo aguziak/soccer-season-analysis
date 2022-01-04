@@ -52,7 +52,7 @@ def get_season_data(season: int, league_id: int) -> pd.DataFrame:
 
     url = "https://api-football-v1.p.rapidapi.com/v3/fixtures"
 
-    querystring = {"league": epl_league_id, "season": season}
+    querystring = {"league": league_id, "season": season}
 
     headers = {
         'x-rapidapi-host': "api-football-v1.p.rapidapi.com",
