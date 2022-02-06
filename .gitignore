@@ -130,3 +130,6 @@ dmypy.json
 
 # API Key
 api_keys/
+
+/local_cache/
+/.idea/
