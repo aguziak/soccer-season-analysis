@@ -1,30 +1,70 @@
 from src.get_season_data import get_season_data
 from constants import team_three_letter_codes, team_colors
+from matplotlib.widgets import Slider
+from functools import partial
 
 import pandas as pd
 import matplotlib.pyplot as plt
 
 
+def draw_plots(round_num: int, total_num_rounds: int, tables_df: pd.DataFrame, bar_graph_ax: plt.Axes,
+               line_graph_ax: plt.Axes):
+    bar_graph_ax.clear()
+    line_graph_ax.clear()
+
+    ylim_pts = 110
+
+    line_graph_ax.set_xlim(left=1, right=total_num_rounds)
+    line_graph_ax.set_ylim(bottom=0, top=ylim_pts)
+
+    bar_graph_ax.set_ylim(bottom=0, top=ylim_pts)
+
+    round_df = tables_df.loc[tables_df['round'] == round_num]
+
+    round_df = round_df.sort_values(by='team_id')
+    tables_till_current_round_df = tables_df.loc[tables_df['round'] <= round_num]
+
+    for team_abbr in round_df['team_abbr']:
+        team_df = tables_till_current_round_df.loc[tables_till_current_round_df['team_abbr'] == team_abbr]
+        team_color = team_df['team_color'].iloc[0]
+        line_graph_ax.plot(team_df['round'], team_df['pts'], label=team_abbr, color=team_color)
+        line_graph_ax.set_ylabel('Points')
+
+    round_df = round_df.sort_values(by='pts')
+
+    bar_graph_ax.bar(x=round_df['team_abbr'], height=round_df['pts'], color=round_df['team_color'])
+    bar_graph_ax.set_ylabel('Points')
+
+
 def create_season_table_plot(tables_df):
-    fig, (bar_ax, line_ax) = plt.subplots(2, constrained_layout=True)
+    fig, (bar_ax, line_ax) = plt.subplots(2)
 
     fig: plt.Figure
     bar_ax: plt.Axes
     line_ax: plt.Axes
 
     final_round_num = max(tables_df['round'])
-    final_round_df = tables_df.loc[tables_df['round'] == final_round_num]
-    final_round_df = final_round_df.sort_values(by='pts')
 
-    bar_ax.bar(x=final_round_df['team_abbr'], height=final_round_df['pts'], color=final_round_df['team_color'])
-    bar_ax.set_ylabel('Points')
+    draw_plots(final_round_num, total_num_rounds=final_round_num, tables_df=tables_df, bar_graph_ax=bar_ax,
+               line_graph_ax=line_ax)
 
-    for team_abbr in final_round_df['team_abbr']:
-        team_df = tables_df.loc[tables_df['team_abbr'] == team_abbr]
-        team_color = team_df['team_color'].iloc[0]
-        line_ax.plot(team_df['round'], team_df['pts'], label=team_abbr, color=team_color)
-        line_ax.set_xlabel('Round')
-        line_ax.set_ylabel('Points')
+    plt.subplots_adjust(bottom=0.2)
+
+    slider_ax = plt.axes([0.2, 0.1, 0.65, 0.03])
+
+    round_slider = Slider(
+        ax=slider_ax,
+        label='Round',
+        valmin=1,
+        valmax=final_round_num,
+        valinit=0,
+        valstep=1
+    )
+
+    draw_plots_partial = partial(draw_plots, total_num_rounds=final_round_num, tables_df=tables_df,
+                                 bar_graph_ax=bar_ax, line_graph_ax=line_ax)
+
+    round_slider.on_changed(draw_plots_partial)
 
     plt.show()
 
