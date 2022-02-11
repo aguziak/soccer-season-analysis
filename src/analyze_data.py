@@ -5,6 +5,7 @@ from functools import partial
 
 import pandas as pd
 import matplotlib.pyplot as plt
+import src.network_analysis as network_analysis
 
 
 def draw_plots(round_num: int, total_num_rounds: int, tables_df: pd.DataFrame, bar_graph_ax: plt.Axes,
@@ -27,7 +28,11 @@ def draw_plots(round_num: int, total_num_rounds: int, tables_df: pd.DataFrame, b
     for team_abbr in round_df['team_abbr']:
         team_df = tables_till_current_round_df.loc[tables_till_current_round_df['team_abbr'] == team_abbr]
         team_color = team_df['team_color'].iloc[0]
-        line_graph_ax.plot(team_df['round'], team_df['pts'], label=team_abbr, color=team_color)
+
+        only_last_marker_mask = [False] * (len(team_df['pts']) - 1) + [True]
+
+        line_graph_ax.plot(team_df['round'], team_df['pts'], label=team_abbr, color=team_color, marker='o',
+                           markersize=4, markevery=only_last_marker_mask)
         line_graph_ax.set_ylabel('Points')
 
     round_df = round_df.sort_values(by='pts')
@@ -57,7 +62,7 @@ def create_season_table_plot(tables_df):
         label='Round',
         valmin=1,
         valmax=final_round_num,
-        valinit=0,
+        valinit=final_round_num,
         valstep=1
     )
 
@@ -91,17 +96,19 @@ def create_tables_df(matches_df: pd.DataFrame) -> pd.DataFrame:
                      'home_gd_full_time', 'away_gd_full_time']
     matches_df = matches_df[relevant_cols]
 
-    home_match_results_df = matches_df[['round', 'teams-home-id', 'teams-home-name', 'home_win', 'draw', 'home_pts',
-                                        'home_gd_half_time', 'home_gd_full_time']] \
-        .rename({'teams-home-id': 'team_id', 'teams-home-name': 'team_name', 'home_win': 'match_win',
-                 'home_pts': 'match_pts', 'home_gd_half_time': 'match_gd_half', 'home_gd_full_time': 'match_gd_full',
+    home_match_results_df = matches_df[['round', 'teams-home-id', 'teams-home-name', 'teams-away-id', 'teams-away-name',
+                                        'home_win', 'draw', 'home_pts', 'home_gd_half_time', 'home_gd_full_time']] \
+        .rename({'teams-home-id': 'team_id', 'teams-home-name': 'team_name', 'teams-away-id': 'opp_team_id',
+                 'teams-away-name': 'opp_team_name', 'home_win': 'match_win', 'home_pts': 'match_pts',
+                 'home_gd_half_time': 'match_gd_half', 'home_gd_full_time': 'match_gd_full',
                  'draw': 'match_draw'}, axis='columns')
     home_match_results_df['home'] = True
 
-    away_match_results_df = matches_df[['round', 'teams-away-id', 'teams-away-name', 'away_win', 'draw', 'away_pts',
-                                        'away_gd_half_time', 'away_gd_full_time']] \
-        .rename({'teams-away-id': 'team_id', 'teams-away-name': 'team_name', 'away_win': 'match_win',
-                 'away_pts': 'match_pts', 'away_gd_half_time': 'match_gd_half', 'away_gd_full_time': 'match_gd_full',
+    away_match_results_df = matches_df[['round', 'teams-home-id', 'teams-home-name', 'teams-away-id', 'teams-away-name',
+                                        'away_win', 'draw', 'away_pts', 'away_gd_half_time', 'away_gd_full_time']] \
+        .rename({'teams-away-id': 'team_id', 'teams-away-name': 'team_name', 'teams-home-id': 'opp_team_id',
+                 'teams-home-name': 'opp_team_name', 'away_win': 'match_win', 'away_pts': 'match_pts',
+                 'away_gd_half_time': 'match_gd_half', 'away_gd_full_time': 'match_gd_full',
                  'draw': 'match_draw'}, axis='columns')
     away_match_results_df['home'] = False
 
@@ -116,8 +123,12 @@ def create_tables_df(matches_df: pd.DataFrame) -> pd.DataFrame:
 
     tables_df = pd.concat([tables_df, cumulative_stats], axis='columns')
     tables_df['losses'] = tables_df['round'] - tables_df['wins'] - tables_df['draws']
+
     tables_df['team_abbr'] = tables_df.apply(lambda row: team_three_letter_codes[row['team_id']], axis='columns')
+    tables_df['opp_team_abbr'] = tables_df.apply(lambda row: team_three_letter_codes[row['opp_team_id']], axis='columns')
+
     tables_df['team_color'] = tables_df.apply(lambda row: team_colors[row['team_id']], axis='columns')
+    tables_df['opp_team_color'] = tables_df.apply(lambda row: team_colors[row['opp_team_id']], axis='columns')
 
     return tables_df
 
@@ -127,6 +138,9 @@ if __name__ == '__main__':
     epl_matches_df = get_season_data(season=2018, league_id=epl_league_id, use_cache=True)
     epl_tables_df = create_tables_df(epl_matches_df)
 
-    create_season_table_plot(epl_tables_df)
+    # create_season_table_plot(epl_tables_df)
 
-    print(epl_tables_df.head())
+    fig, ax = plt.subplots()
+    network_analysis.create_network_from_table_data(table_df=epl_tables_df, round_num=38, network_graph_ax=ax)
+
+    plt.show()
