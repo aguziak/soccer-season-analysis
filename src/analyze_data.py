@@ -1,9 +1,11 @@
 from src.get_season_data import get_season_data
 from constants import team_three_letter_codes, team_colors
+from scipy import stats
 
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+import src.visualizations
 
 
 def draw_plots(round_num: int, total_num_rounds: int, tables_df: pd.DataFrame, bar_graph_ax: plt.Axes,
@@ -135,6 +137,23 @@ def perform_analysis():
 
     epl_tables_df['big_win'] = epl_tables_df['match_gd_full'] >= big_win_goal_diff_thresh
     epl_tables_df['bad_loss'] = epl_tables_df['match_gd_full'] <= -big_win_goal_diff_thresh
+
+    src.visualizations.create_bokeh_plot_for_round(epl_tables_df, 20)
+
+    big_win_group = epl_tables_df.loc[epl_tables_df['big_win']]['3_match_ppg_diff']
+    bad_loss_group = epl_tables_df.loc[epl_tables_df['bad_loss']]['3_match_ppg_diff']
+    control_group = epl_tables_df.loc[(~epl_tables_df['big_win']) & (~epl_tables_df['bad_loss'])]['3_match_ppg_diff']
+
+    # kw_h_stat, p_value = stats.kruskal(bad_loss_group, control_group, nan_policy='omit')
+    #
+    # fig, ax = plt.subplots()
+    #
+    # fig: plt.Figure
+    # ax: plt.Axes
+    #
+    # ax.hist(epl_tables_df['next_3_match_ppg_avg'], bins=10)
+    #
+    # plt.show()
 
 
 if __name__ == '__main__':
