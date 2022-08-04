@@ -3,7 +3,7 @@ import numpy as np
 import math
 
 from bokeh.plotting import figure, show
-from bokeh.models import ColumnDataSource, LabelSet, VBar, Legend
+from bokeh.models import ColumnDataSource, LabelSet, VBar, Legend, MultiLine
 from bokeh.layouts import row, column
 
 from functools import partial
@@ -25,7 +25,8 @@ def create_bokeh_plot_for_round(tables_df: pd.DataFrame, round_num: int):
                         x_range=(0, max(tables_df['round'])),
                         y_range=(0, max(tables_df['pts']) + 10),
                         x_axis_label='Round',
-                        y_axis_label='Points')
+                        y_axis_label='Points',
+                        toolbar_location=None)
 
     line_graph.toolbar.active_drag = None
     line_graph.toolbar.active_scroll = None
@@ -61,16 +62,34 @@ def create_bokeh_plot_for_round(tables_df: pd.DataFrame, round_num: int):
 
     legend_items = list()
 
+    tables_till_current_round_df = tables_df.loc[tables_df['round'] <= round_num]
+
+    xs = list()
+    ys = list()
+    team_colors = list()
+    team_abbr_list = list()
+
     for team_abbr in round_df['team_abbr']:
-        tables_till_current_round_df = tables_df.loc[tables_df['round'] <= round_num]
         team_df = tables_till_current_round_df.loc[tables_till_current_round_df['team_abbr'] == team_abbr]
         team_color = team_df['team_color'].iloc[0]
 
-        legend_items.append(
-            [team_abbr,
-             [line_graph.line(team_df['round'], team_df['pts'], line_color=team_color, line_width=2)]
-             ])
-        bar_graph.vbar(x='x', top='top', color='color', source=bar_data_source)
+        xs.append(team_df['round'])
+        ys.append(team_df['pts'])
+        team_colors.append(team_color)
+        team_abbr_list.append(team_abbr)
+
+    lines_data_source = ColumnDataSource(
+        dict(
+            xs=xs,
+            ys=ys,
+            team_colors=team_colors,
+            team_abbr=team_abbr_list
+        )
+    )
+
+    bar_graph.vbar(x='x', top='top', color='color', source=bar_data_source)
+    line_graph.add_layout(Legend(), 'left')
+    line_graph.multi_line(xs='xs', ys='ys', line_color='team_colors', line_width=2, legend_field='team_abbr', source=lines_data_source)
 
     line_graph.add_layout(Legend(items=legend_items), 'left')
     show(row(line_graph, bar_graph))
