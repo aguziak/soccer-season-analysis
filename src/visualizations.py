@@ -3,13 +3,12 @@ import numpy as np
 import math
 
 from bokeh.plotting import figure, show
-from bokeh.models import ColumnDataSource, LabelSet, VBar, Legend, MultiLine
+from bokeh.models import ColumnDataSource, LabelSet, VBar, Legend, MultiLine, Slider, CustomJS
 from bokeh.layouts import row, column
 
 from functools import partial
 
 from matplotlib import pyplot as plt
-from matplotlib.widgets import Slider
 
 from src.analyze_data import draw_plots
 
@@ -91,8 +90,13 @@ def create_bokeh_plot_for_round(tables_df: pd.DataFrame, round_num: int):
     line_graph.add_layout(Legend(), 'left')
     line_graph.multi_line(xs='xs', ys='ys', line_color='team_colors', line_width=2, legend_field='team_abbr', source=lines_data_source)
 
+    round_slider = Slider(start=1, end=max(tables_df['round']), value=1, step=1, title='Round')
+
     line_graph.add_layout(Legend(items=legend_items), 'left')
-    show(row(line_graph, bar_graph))
+
+    show(column(row(line_graph, bar_graph), round_slider))
+
+    return lines_data_source, bar_data_source
 
 
 def create_season_table_plot(tables_df):

@@ -138,7 +138,7 @@ def perform_analysis():
     epl_tables_df['big_win'] = epl_tables_df['match_gd_full'] >= big_win_goal_diff_thresh
     epl_tables_df['bad_loss'] = epl_tables_df['match_gd_full'] <= -big_win_goal_diff_thresh
 
-    src.visualizations.create_bokeh_plot_for_round(epl_tables_df, 20)
+    lines_data_source, bars_data_source = src.visualizations.create_bokeh_plot_for_round(epl_tables_df, 20)
 
     big_win_group = epl_tables_df.loc[epl_tables_df['big_win']]['3_match_ppg_diff']
     bad_loss_group = epl_tables_df.loc[epl_tables_df['bad_loss']]['3_match_ppg_diff']
