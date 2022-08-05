@@ -1,9 +1,8 @@
 import pandas as pd
-import numpy as np
 import math
 
-from bokeh.plotting import figure, show
-from bokeh.models import ColumnDataSource, LabelSet, VBar, Legend, MultiLine, Slider, CustomJS
+from bokeh.plotting import figure
+from bokeh.models import ColumnDataSource, Slider
 from bokeh.layouts import row, column
 
 from functools import partial
@@ -13,19 +12,27 @@ from matplotlib import pyplot as plt
 from src.analyze_data import draw_plots
 
 
-def create_bokeh_plot_for_round(tables_df: pd.DataFrame, round_num: int):
+def create_bokeh_plot_for_round(tables_df: pd.DataFrame, round_num: int, plot_size=400):
+    final_round_df = tables_df.loc[tables_df['round'] == max(tables_df['round'])] \
+        .sort_values(by=['pts', 'gd_full'], ascending=True)
+    final_round_df['final_position'] = final_round_df['pts'].rank(method='first').astype(int)
+    final_round_df = final_round_df.reset_index(drop=True)
+
+    tables_df = tables_df.reset_index(drop=True)
+    tables_df = tables_df.merge(final_round_df[['team_id', 'final_position']], on='team_id')
+
+    tables_df = tables_df.sort_values(by=['round', 'pts', 'team_id'], ascending=[True, False, True])
+
     round_df = tables_df.loc[tables_df['round'] == round_num].reset_index(drop=True)
-
-    round_df = round_df.sort_values(by='team_id')
-
     round_df = round_df.sort_values(by='pts', ascending=True)
 
-    line_graph = figure(title='Season Points Progression',
-                        x_range=(0, max(tables_df['round'])),
+    line_graph = figure(x_range=(0, max(tables_df['round'])),
                         y_range=(0, max(tables_df['pts']) + 10),
                         x_axis_label='Round',
                         y_axis_label='Points',
-                        toolbar_location=None)
+                        toolbar_location=None,
+                        plot_width=plot_size,
+                        plot_height=plot_size)
 
     line_graph.toolbar.active_drag = None
     line_graph.toolbar.active_scroll = None
@@ -35,9 +42,13 @@ def create_bokeh_plot_for_round(tables_df: pd.DataFrame, round_num: int):
 
     line_graph.xgrid.grid_line_color = None
 
-    bar_graph = figure(y_axis_label='Points',
-                       x_range=round_df['team_abbr'],
-                       toolbar_location=None)
+    bar_graph = figure(title='Season Points Progression',
+                       y_axis_label='Points',
+                       x_range=final_round_df['team_abbr'],
+                       y_range=(0, max(tables_df['pts']) + 10),
+                       toolbar_location=None,
+                       plot_width=plot_size,
+                       plot_height=plot_size)
 
     bar_graph.toolbar.active_drag = None
     bar_graph.toolbar.active_scroll = None
@@ -59,8 +70,6 @@ def create_bokeh_plot_for_round(tables_df: pd.DataFrame, round_num: int):
         )
     )
 
-    legend_items = list()
-
     tables_till_current_round_df = tables_df.loc[tables_df['round'] <= round_num]
 
     xs = list()
@@ -69,6 +78,7 @@ def create_bokeh_plot_for_round(tables_df: pd.DataFrame, round_num: int):
     team_abbr_list = list()
 
     for team_abbr in round_df['team_abbr']:
+        round_df = round_df.sort_values(by='final_position')
         team_df = tables_till_current_round_df.loc[tables_till_current_round_df['team_abbr'] == team_abbr]
         team_color = team_df['team_color'].iloc[0]
 
@@ -87,16 +97,46 @@ def create_bokeh_plot_for_round(tables_df: pd.DataFrame, round_num: int):
     )
 
     bar_graph.vbar(x='x', top='top', color='color', source=bar_data_source)
-    line_graph.add_layout(Legend(), 'left')
-    line_graph.multi_line(xs='xs', ys='ys', line_color='team_colors', line_width=2, legend_field='team_abbr', source=lines_data_source)
+    line_graph.multi_line(xs='xs', ys='ys', line_color='team_colors', line_width=2, source=lines_data_source)
 
     round_slider = Slider(start=1, end=max(tables_df['round']), value=1, step=1, title='Round')
 
-    line_graph.add_layout(Legend(items=legend_items), 'left')
+    def slider_update(_, __, new):
+        update_round_df = tables_df.loc[tables_df['round'] == new].reset_index(drop=True)
+        update_round_df = update_round_df.sort_values(by='final_position')
 
-    show(column(row(line_graph, bar_graph), round_slider))
+        bar_data_source.data['x'] = update_round_df['team_abbr']
+        bar_data_source.data['y'] = [0] * len(update_round_df)
+        bar_data_source.data['top'] = update_round_df['pts']
+        bar_data_source.data['color'] = update_round_df['team_color']
+        bar_data_source.data['label'] = update_round_df['team_abbr']
 
-    return lines_data_source, bar_data_source
+        update_tables_till_current_round_df = tables_df.loc[tables_df['round'] <= new]
+
+        new_xs = list()
+        new_ys = list()
+        new_team_colors = list()
+        new_team_abbr = list()
+
+        for update_team_abbr in round_df['team_abbr']:
+            update_team_df = update_tables_till_current_round_df.loc[
+                update_tables_till_current_round_df['team_abbr'] == update_team_abbr]
+            update_team_color = update_team_df['team_color'].iloc[0]
+
+            new_xs.append(update_team_df['round'])
+            new_ys.append(update_team_df['pts'])
+
+            new_team_colors.append(update_team_color)
+            new_team_abbr.append(update_team_abbr)
+
+        lines_data_source.data['xs'] = new_xs
+        lines_data_source.data['ys'] = new_ys
+        lines_data_source.data['team_colors'] = new_team_colors
+        lines_data_source.data['team_abbr'] = new_team_abbr
+
+    round_slider.on_change('value', slider_update)
+
+    return column(row(bar_graph, line_graph), round_slider)
 
 
 def create_season_table_plot(tables_df):
