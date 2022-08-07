@@ -1,11 +1,10 @@
-from src.get_season_data import get_season_data
+from src.get_season_data import get_season_data, get_team_colors_from_api
 from constants import team_three_letter_codes, team_colors
 from scipy import stats
 
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-import src.visualizations
 
 
 def draw_plots(round_num: int, total_num_rounds: int, tables_df: pd.DataFrame, bar_graph_ax: plt.Axes,
@@ -60,23 +59,25 @@ def create_tables_df(matches_df: pd.DataFrame) -> pd.DataFrame:
     relevant_cols = ['round', 'teams-home-id', 'teams-home-name', 'teams-away-id', 'teams-away-name',
                      'score-halftime-home', 'score-halftime-away', 'score-fulltime-home', 'score-fulltime-away',
                      'home_win', 'away_win', 'draw', 'home_pts', 'away_pts', 'home_gd_half_time', 'away_gd_half_time',
-                     'home_gd_full_time', 'away_gd_full_time']
+                     'home_gd_full_time', 'away_gd_full_time', 'league-id', 'league-season', 'teams-home-logo']
     matches_df = matches_df[relevant_cols]
 
     home_match_results_df = matches_df[['round', 'teams-home-id', 'teams-home-name', 'teams-away-id', 'teams-away-name',
-                                        'home_win', 'draw', 'home_pts', 'home_gd_half_time', 'home_gd_full_time']] \
+                                        'home_win', 'draw', 'home_pts', 'home_gd_half_time', 'home_gd_full_time',
+                                        'league-id', 'league-season']] \
         .rename({'teams-home-id': 'team_id', 'teams-home-name': 'team_name', 'teams-away-id': 'opp_team_id',
                  'teams-away-name': 'opp_team_name', 'home_win': 'match_win', 'home_pts': 'match_pts',
                  'home_gd_half_time': 'match_gd_half', 'home_gd_full_time': 'match_gd_full',
-                 'draw': 'match_draw'}, axis='columns')
+                 'draw': 'match_draw', 'league-id': 'league_id', 'league-season': 'league_season'}, axis='columns')
     home_match_results_df['home'] = True
 
     away_match_results_df = matches_df[['round', 'teams-home-id', 'teams-home-name', 'teams-away-id', 'teams-away-name',
-                                        'away_win', 'draw', 'away_pts', 'away_gd_half_time', 'away_gd_full_time']] \
+                                        'away_win', 'draw', 'away_pts', 'away_gd_half_time', 'away_gd_full_time',
+                                        'league-id', 'league-season']] \
         .rename({'teams-away-id': 'team_id', 'teams-away-name': 'team_name', 'teams-home-id': 'opp_team_id',
                  'teams-home-name': 'opp_team_name', 'away_win': 'match_win', 'away_pts': 'match_pts',
                  'away_gd_half_time': 'match_gd_half', 'away_gd_full_time': 'match_gd_full',
-                 'draw': 'match_draw'}, axis='columns')
+                 'draw': 'match_draw', 'league-id': 'league_id', 'league-season': 'league_season'}, axis='columns')
     away_match_results_df['home'] = False
 
     tables_df = pd.concat([home_match_results_df, away_match_results_df], axis='rows') \
@@ -95,7 +96,16 @@ def create_tables_df(matches_df: pd.DataFrame) -> pd.DataFrame:
     tables_df['opp_team_abbr'] = tables_df.apply(lambda row: team_three_letter_codes[row['opp_team_id']],
                                                  axis='columns')
 
-    tables_df['team_color'] = tables_df.apply(lambda row: team_colors[row['team_id']], axis='columns')
+    team_colors_from_api = get_team_colors_from_api(matches_df, use_cache=True, league_id=tables_df['league_season'][0],
+                                                    season=tables_df['league_season'][0])
+
+    def get_team_color(row: pd.Series):
+        if row['team_id'] in team_colors:
+            return team_colors[row['team_id']]
+        else:
+            return team_colors_from_api['team_id']['team-color']
+
+    tables_df['team_color'] = tables_df.apply(get_team_color, axis='columns')
     tables_df['opp_team_color'] = tables_df.apply(lambda row: team_colors[row['opp_team_id']], axis='columns')
 
     return tables_df
