@@ -24,19 +24,19 @@ def draw_plots(round_num: int, total_num_rounds: int, tables_df: pd.DataFrame, b
     round_df = round_df.sort_values(by='team_id')
     tables_till_current_round_df = tables_df.loc[tables_df['round'] <= round_num]
 
-    for team_abbr in round_df['team_abbr']:
-        team_df = tables_till_current_round_df.loc[tables_till_current_round_df['team_abbr'] == team_abbr]
+    for team_name in round_df['team_name']:
+        team_df = tables_till_current_round_df.loc[tables_till_current_round_df['team_name'] == team_name]
         team_color = team_df['team_color'].iloc[0]
 
         only_last_marker_mask = [False] * (len(team_df['pts']) - 1) + [True]
 
-        line_graph_ax.plot(team_df['round'], team_df['pts'], label=team_abbr, color=team_color, marker='o',
+        line_graph_ax.plot(team_df['round'], team_df['pts'], label=team_name, color=team_color, marker='o',
                            markersize=4, markevery=only_last_marker_mask)
         line_graph_ax.set_ylabel('Points')
 
     round_df = round_df.sort_values(by='pts')
 
-    bar_graph_ax.bar(x=round_df['team_abbr'], height=round_df['pts'], color=round_df['team_color'])
+    bar_graph_ax.bar(x=round_df['team_name'], height=round_df['pts'], color=round_df['team_color'])
     bar_graph_ax.set_ylabel('Points')
 
 
@@ -92,21 +92,17 @@ def create_tables_df(matches_df: pd.DataFrame) -> pd.DataFrame:
     tables_df = pd.concat([tables_df, cumulative_stats], axis='columns')
     tables_df['losses'] = tables_df['round'] - tables_df['wins'] - tables_df['draws']
 
-    tables_df['team_abbr'] = tables_df.apply(lambda row: team_three_letter_codes[row['team_id']], axis='columns')
-    tables_df['opp_team_abbr'] = tables_df.apply(lambda row: team_three_letter_codes[row['opp_team_id']],
-                                                 axis='columns')
-
-    team_colors_from_api = get_team_colors_from_api(matches_df, use_cache=True, league_id=tables_df['league_season'][0],
+    team_colors_from_api = get_team_colors_from_api(matches_df, use_cache=True, league_id=tables_df['league_id'][0],
                                                     season=tables_df['league_season'][0])
 
-    def get_team_color(row: pd.Series):
-        if row['team_id'] in team_colors:
-            return team_colors[row['team_id']]
+    def get_team_color(row: pd.Series, row_team_id_col_name: str) -> str:
+        if row[row_team_id_col_name] in team_colors:
+            return team_colors[row[row_team_id_col_name]]
         else:
-            return team_colors_from_api['team_id']['team-color']
+            return team_colors_from_api.loc[row[row_team_id_col_name]]['team_color']
 
-    tables_df['team_color'] = tables_df.apply(get_team_color, axis='columns')
-    tables_df['opp_team_color'] = tables_df.apply(lambda row: team_colors[row['opp_team_id']], axis='columns')
+    tables_df['team_color'] = tables_df.apply(get_team_color, row_team_id_col_name='team_id', axis='columns')
+    tables_df['opp_team_color'] = tables_df.apply(get_team_color, row_team_id_col_name='opp_team_id', axis='columns')
 
     return tables_df
 
@@ -142,7 +138,7 @@ def _create_rolling_avg_match_pts(group: pd.DataFrame, period: int):
 
 def perform_analysis():
     epl_league_id = 39
-    epl_matches_df = get_season_data(season=2018, league_id=epl_league_id, use_cache=True)
+    epl_matches_df = get_season_data(season=2019, league_id=epl_league_id, use_cache=True)
     epl_tables_df = create_tables_df(epl_matches_df)
     epl_tables_df = epl_tables_df.groupby('team_id').apply(_create_rolling_avg_match_pts, period=3)
 

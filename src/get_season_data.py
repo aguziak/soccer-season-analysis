@@ -5,7 +5,6 @@ import json
 import io
 import colorsys
 import urllib.request
-import csv
 
 from PIL import Image
 
@@ -92,7 +91,7 @@ def get_season_data(season: int, league_id: int, use_cache=False) -> pd.DataFram
 
 
 def get_team_colors_from_api(matches_df: pd.DataFrame, use_cache=False, league_id=None, season=None,
-                             rebuild_cache=False):
+                             rebuild_cache=False) -> pd.DataFrame:
     """
     Gets a dictionary of team colors by finding the most common pixel color in the teams' logo
 
@@ -109,7 +108,8 @@ def get_team_colors_from_api(matches_df: pd.DataFrame, use_cache=False, league_i
             the new values
 
     Returns:
-        dict: Dictionary where the keys are team ids as ints and the values are hex colors
+        DataFrame: DataFrame where the index is team ids and the only column is team_color containing
+            team color values as hex colors
     """
     cache_dir = os.path.abspath(f'../local_cache/')
     cache_file_path = f'{cache_dir}/league_{league_id}_season_{season}_color_data.csv'
@@ -122,7 +122,7 @@ def get_team_colors_from_api(matches_df: pd.DataFrame, use_cache=False, league_i
 
         if file_already_exists:
             print('Retrieving color data from local cache')
-            return pd.read_csv(cache_file_path)
+            return pd.read_csv(cache_file_path, index_col='team_id')
 
     def get_nth_most_common_color(colors: list, n: int):
         """
@@ -152,7 +152,7 @@ def get_team_colors_from_api(matches_df: pd.DataFrame, use_cache=False, league_i
                 image files served by API-FOOTBALL in Rapid API and a teams-home-id containing a team id.
 
         Returns:
-            DataFrame: DataFrame indexed by team id with a column named team-color containing the hex value
+            DataFrame: DataFrame indexed by team id with a column named team_color containing the hex value
                 of the most common pixel found in the team's logo.
         """
         logo_url = df.iloc[0]['teams-home-logo']
@@ -178,7 +178,10 @@ def get_team_colors_from_api(matches_df: pd.DataFrame, use_cache=False, league_i
 
     colors_df = matches_df.groupby(by='teams-home-id') \
         .apply(get_colors) \
-        .rename({0: 'team-color'}, axis=1)
+        .to_frame() \
+        .rename({0: 'team_color'}, axis=1)
+
+    colors_df.index.rename('team_id', inplace=True)
 
     if use_cache or rebuild_cache:
         print('Saving color data to local cache')
@@ -190,5 +193,5 @@ def get_team_colors_from_api(matches_df: pd.DataFrame, use_cache=False, league_i
 
 if __name__ == '__main__':
     epl_league_id = 39
-    result = get_season_data(2018, epl_league_id)
+    result = get_season_data(2020, epl_league_id)
     print(result.head())
