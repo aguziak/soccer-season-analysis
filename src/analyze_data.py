@@ -92,7 +92,8 @@ def create_tables_df(matches_df: pd.DataFrame) -> pd.DataFrame:
     tables_df['losses'] = tables_df['round'] - tables_df['wins'] - tables_df['draws']
 
     tables_df['team_abbr'] = tables_df.apply(lambda row: team_three_letter_codes[row['team_id']], axis='columns')
-    tables_df['opp_team_abbr'] = tables_df.apply(lambda row: team_three_letter_codes[row['opp_team_id']], axis='columns')
+    tables_df['opp_team_abbr'] = tables_df.apply(lambda row: team_three_letter_codes[row['opp_team_id']],
+                                                 axis='columns')
 
     tables_df['team_color'] = tables_df.apply(lambda row: team_colors[row['team_id']], axis='columns')
     tables_df['opp_team_color'] = tables_df.apply(lambda row: team_colors[row['opp_team_id']], axis='columns')
@@ -116,8 +117,16 @@ def _create_rolling_avg_match_pts(group: pd.DataFrame, period: int):
 
     """
     group = group.sort_values(by='round')
-    group[f'prev_{period}_match_ppg_avg'] = group['match_pts'].rolling(window=period, min_periods=0).mean()
-    group[f'next_{period}_match_ppg_avg'] = group[f'prev_{period}_match_ppg_avg'].shift(-3)
+
+    group[f'prev_{period}_match_ppg_avg'] = group['match_pts'] \
+        .shift(1) \
+        .rolling(window=period, min_periods=period) \
+        .mean()
+
+    group[f'next_{period}_match_ppg_avg'] = group[::-1]['match_pts'] \
+        .shift(1) \
+        .rolling(window=period, min_periods=period) \
+        .mean()
     return group
 
 
@@ -138,22 +147,24 @@ def perform_analysis():
     epl_tables_df['big_win'] = epl_tables_df['match_gd_full'] >= big_win_goal_diff_thresh
     epl_tables_df['bad_loss'] = epl_tables_df['match_gd_full'] <= -big_win_goal_diff_thresh
 
-    src.visualizations.create_bokeh_plot_for_round(epl_tables_df, 20)
+    big_win_group = epl_tables_df.loc[epl_tables_df['big_win']]
+    bad_loss_group = epl_tables_df.loc[epl_tables_df['bad_loss']]
+    control_group = epl_tables_df.loc[(~epl_tables_df['big_win']) & (~epl_tables_df['bad_loss'])]
 
-    big_win_group = epl_tables_df.loc[epl_tables_df['big_win']]['3_match_ppg_diff']
-    bad_loss_group = epl_tables_df.loc[epl_tables_df['bad_loss']]['3_match_ppg_diff']
-    control_group = epl_tables_df.loc[(~epl_tables_df['big_win']) & (~epl_tables_df['bad_loss'])]['3_match_ppg_diff']
+    kw_h_stat, p_value = stats.kruskal(bad_loss_group['3_match_ppg_diff'],
+                                       control_group['3_match_ppg_diff'],
+                                       nan_policy='omit')
 
-    # kw_h_stat, p_value = stats.kruskal(bad_loss_group, control_group, nan_policy='omit')
-    #
-    # fig, ax = plt.subplots()
-    #
-    # fig: plt.Figure
-    # ax: plt.Axes
-    #
+    fig, ax = plt.subplots()
+
+    fig: plt.Figure
+    ax: plt.Axes
+
     # ax.hist(epl_tables_df['next_3_match_ppg_avg'], bins=10)
-    #
-    # plt.show()
+    ax.hist(big_win_group['3_match_ppg_diff'], bins=10)
+    ax.hist(bad_loss_group['3_match_ppg_diff'], bins=10)
+
+    plt.show()
 
 
 if __name__ == '__main__':
