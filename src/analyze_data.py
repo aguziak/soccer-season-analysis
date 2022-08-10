@@ -184,13 +184,13 @@ def perform_analysis():
     epl_league_id = 39
     epl_tables_df = create_multi_season_tables_df(2011, 2021, epl_league_id)
 
-    res = {period_length: run_statistical_test_for_period(epl_tables_df, period=period_length)
+    res = {period_length: run_gd_statistical_test_for_period(epl_tables_df, period=period_length)
            for period_length in range(3, 11)}
 
     print(res)
 
 
-def run_statistical_test_for_period(epl_tables_df, period=3):
+def run_gd_statistical_test_for_period(epl_tables_df, period=3):
     epl_tables_df = epl_tables_df.groupby(by=['league_season', 'team_id']).apply(_create_rolling_avg_match_pts,
                                                                                  period=period)
     epl_tables_df = epl_tables_df.dropna()
