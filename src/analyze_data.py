@@ -1,12 +1,11 @@
 from src.get_season_data import get_season_data, get_team_colors_from_api
 from constants import team_colors
 from scipy import stats
-from bokeh.plotting import show
 
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-import visualizations
+import datetime
 
 
 def draw_plots(round_num: int, total_num_rounds: int, tables_df: pd.DataFrame, bar_graph_ax: plt.Axes,
@@ -61,38 +60,44 @@ def create_tables_df(matches_df: pd.DataFrame) -> pd.DataFrame:
     relevant_cols = ['round', 'teams-home-id', 'teams-home-name', 'teams-away-id', 'teams-away-name',
                      'score-halftime-home', 'score-halftime-away', 'score-fulltime-home', 'score-fulltime-away',
                      'home_win', 'away_win', 'draw', 'home_pts', 'away_pts', 'home_gd_half_time', 'away_gd_half_time',
-                     'home_gd_full_time', 'away_gd_full_time', 'league-id', 'league-season', 'teams-home-logo']
+                     'home_gd_full_time', 'away_gd_full_time', 'league-id', 'league-season', 'teams-home-logo',
+                     'fixture-date']
     matches_df = matches_df[relevant_cols]
 
     home_match_results_df = matches_df[['round', 'teams-home-id', 'teams-home-name', 'teams-away-id', 'teams-away-name',
                                         'home_win', 'draw', 'home_pts', 'home_gd_half_time', 'home_gd_full_time',
-                                        'league-id', 'league-season']] \
+                                        'league-id', 'league-season', 'fixture-date']] \
         .rename({'teams-home-id': 'team_id', 'teams-home-name': 'team_name', 'teams-away-id': 'opp_team_id',
                  'teams-away-name': 'opp_team_name', 'home_win': 'match_win', 'home_pts': 'match_pts',
                  'home_gd_half_time': 'match_gd_half', 'home_gd_full_time': 'match_gd_full',
-                 'draw': 'match_draw', 'league-id': 'league_id', 'league-season': 'league_season'}, axis='columns')
+                 'draw': 'match_draw', 'league-id': 'league_id', 'league-season': 'league_season',
+                 'fixture-date': 'fixture_date'}, axis='columns')
     home_match_results_df['home'] = True
 
     away_match_results_df = matches_df[['round', 'teams-home-id', 'teams-home-name', 'teams-away-id', 'teams-away-name',
                                         'away_win', 'draw', 'away_pts', 'away_gd_half_time', 'away_gd_full_time',
-                                        'league-id', 'league-season']] \
+                                        'league-id', 'league-season', 'fixture-date']] \
         .rename({'teams-away-id': 'team_id', 'teams-away-name': 'team_name', 'teams-home-id': 'opp_team_id',
                  'teams-home-name': 'opp_team_name', 'away_win': 'match_win', 'away_pts': 'match_pts',
                  'away_gd_half_time': 'match_gd_half', 'away_gd_full_time': 'match_gd_full',
-                 'draw': 'match_draw', 'league-id': 'league_id', 'league-season': 'league_season'}, axis='columns')
+                 'draw': 'match_draw', 'league-id': 'league_id', 'league-season': 'league_season',
+                 'fixture-date': 'fixture_date'}, axis='columns')
     away_match_results_df['home'] = False
 
     tables_df = pd.concat([home_match_results_df, away_match_results_df], axis='rows') \
         .sort_values(by='round') \
         .reset_index(drop=True)
 
-    cumulative_stats = tables_df[['team_id', 'match_win', 'match_draw', 'match_pts', 'match_gd_half', 'match_gd_full']] \
+    cumulative_stats = tables_df[['team_id', 'match_win', 'match_draw', 'match_pts', 'match_gd_half',
+                                  'match_gd_full']] \
         .groupby(by='team_id').cumsum() \
         .rename({'match_win': 'wins', 'match_draw': 'draws', 'match_pts': 'pts', 'match_gd_half': 'gd_half',
                  'match_gd_full': 'gd_full'}, axis='columns')
 
     tables_df = pd.concat([tables_df, cumulative_stats], axis='columns')
     tables_df['losses'] = tables_df['round'] - tables_df['wins'] - tables_df['draws']
+
+    tables_df['fixture_date'] = tables_df['fixture_date'].apply(datetime.datetime.fromisoformat)
 
     team_colors_from_api = get_team_colors_from_api(matches_df, use_cache=True, league_id=tables_df['league_id'][0],
                                                     season=tables_df['league_season'][0])
@@ -184,40 +189,89 @@ def perform_analysis():
     epl_league_id = 39
     epl_tables_df = create_multi_season_tables_df(2011, 2021, epl_league_id)
 
-    res = {period_length: run_gd_statistical_test_for_period(epl_tables_df, period=period_length)
-           for period_length in range(3, 11)}
+    gd_res = {period_length: run_gd_statistical_test_for_period(epl_tables_df, period=period_length, by_team=True)
+              for period_length in range(3, 11)}
+    tod_res = run_tod_statistical_test_for_period(epl_tables_df)
 
-    print(res)
+    print(gd_res)
+    print(tod_res)
 
 
-def run_gd_statistical_test_for_period(epl_tables_df, period=3):
+def run_tod_statistical_test_for_period(epl_tables_df, late_game_hour_cutoff=18):
+    epl_tables_df['fixture_hour'] = epl_tables_df['fixture_date'].apply(lambda date: date.hour)
+    epl_tables_df['late_game'] = epl_tables_df['fixture_hour'] >= late_game_hour_cutoff
+
+    res = dict()
+    for team_name in epl_tables_df['team_name'].unique():
+        late_game_group = epl_tables_df.loc[epl_tables_df['late_game'] & (epl_tables_df['team_name'] == team_name)]
+        control_group = epl_tables_df.loc[(~epl_tables_df['late_game']) & (epl_tables_df['team_name'] == team_name)]
+
+        late_game_outcomes = late_game_group.groupby('match_pts').apply(len).tolist()
+        control_game_outcomes = control_group.groupby('match_pts').apply(len).tolist()
+
+        if len(late_game_outcomes) == 3 and len(control_game_outcomes) == 3:
+            g, p_value, dof, expected = stats.chi2_contingency(
+                np.array([late_game_outcomes, control_game_outcomes])
+            )
+        else:
+            p_value = np.nan
+
+        res.update({team_name: (len(late_game_group), p_value)})
+
+    return res
+
+
+def run_gd_statistical_test_for_period(epl_tables_df, period=3, by_team=False, big_win_goal_diff_thresh=4):
     epl_tables_df = epl_tables_df.groupby(by=['league_season', 'team_id']).apply(_create_rolling_avg_match_pts,
                                                                                  period=period)
     epl_tables_df = epl_tables_df.dropna()
     epl_tables_df[f'{period}_match_ppg_diff'] = \
         epl_tables_df[f'prev_{period}_match_ppg_avg'] - epl_tables_df[f'next_{period}_match_ppg_avg']
 
-    winning_goal_diff_series = epl_tables_df.loc[epl_tables_df['match_win']]['match_gd_full']
-    mean_winning_gd = winning_goal_diff_series.mean()
-    std_winning_gd = winning_goal_diff_series.std()
-
-    big_win_goal_diff_thresh = np.round(mean_winning_gd + 2 * std_winning_gd)
-
     epl_tables_df['big_win'] = epl_tables_df['match_gd_full'] >= big_win_goal_diff_thresh
     epl_tables_df['bad_loss'] = epl_tables_df['match_gd_full'] <= -big_win_goal_diff_thresh
 
-    big_win_group = epl_tables_df.loc[epl_tables_df['big_win']]
-    bad_loss_group = epl_tables_df.loc[epl_tables_df['bad_loss']]
-    control_group = epl_tables_df.loc[(~epl_tables_df['big_win']) & (~epl_tables_df['bad_loss'])]
+    if by_team:
+        res = dict()
+        for team_name in epl_tables_df['team_name'].unique():
+            big_win_group = epl_tables_df.loc[epl_tables_df['big_win'] & (epl_tables_df['team_name'] == team_name)]
+            bad_loss_group = epl_tables_df.loc[
+                epl_tables_df['bad_loss'] & (epl_tables_df['team_name'] == team_name)]
+            control_group = epl_tables_df.loc[(~epl_tables_df['big_win'])
+                                              & (~epl_tables_df['bad_loss'])
+                                              & (epl_tables_df['team_name'] == team_name)]
 
-    _, bad_loss_p_value = stats.mannwhitneyu(bad_loss_group[f'{period}_match_ppg_diff'],
-                                             control_group[f'{period}_match_ppg_diff'],
-                                             nan_policy='omit')
-    _, big_win_p_value = stats.mannwhitneyu(big_win_group[f'{period}_match_ppg_diff'],
-                                            control_group[f'{period}_match_ppg_diff'],
-                                            nan_policy='omit')
+            if len(bad_loss_group) != 0:
+                _, bad_loss_p_value = stats.mannwhitneyu(bad_loss_group[f'{period}_match_ppg_diff'],
+                                                         control_group[f'{period}_match_ppg_diff'],
+                                                         nan_policy='omit')
+            else:
+                bad_loss_p_value = np.nan
 
-    return (len(bad_loss_group), bad_loss_p_value), (len(big_win_group), big_win_p_value)
+            if len(big_win_group) != 0:
+                _, big_win_p_value = stats.mannwhitneyu(big_win_group[f'{period}_match_ppg_diff'],
+                                                        control_group[f'{period}_match_ppg_diff'],
+                                                        nan_policy='omit')
+            else:
+                big_win_p_value = np.nan
+
+            res.update(
+                {team_name: ((len(bad_loss_group), bad_loss_p_value), (len(big_win_group), big_win_p_value))})
+
+        return res
+    else:
+        big_win_group = epl_tables_df.loc[epl_tables_df['big_win']]
+        bad_loss_group = epl_tables_df.loc[epl_tables_df['bad_loss']]
+        control_group = epl_tables_df.loc[(~epl_tables_df['big_win']) & (~epl_tables_df['bad_loss'])]
+
+        _, bad_loss_p_value = stats.mannwhitneyu(bad_loss_group[f'{period}_match_ppg_diff'],
+                                                 control_group[f'{period}_match_ppg_diff'],
+                                                 nan_policy='omit')
+        _, big_win_p_value = stats.mannwhitneyu(big_win_group[f'{period}_match_ppg_diff'],
+                                                control_group[f'{period}_match_ppg_diff'],
+                                                nan_policy='omit')
+
+        return (len(bad_loss_group), bad_loss_p_value), (len(big_win_group), big_win_p_value)
 
 
 if __name__ == '__main__':
