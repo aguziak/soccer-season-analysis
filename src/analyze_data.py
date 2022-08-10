@@ -192,9 +192,83 @@ def perform_analysis():
     gd_res = {period_length: run_gd_statistical_test_for_period(epl_tables_df, period=period_length, by_team=True)
               for period_length in range(3, 11)}
     tod_res = run_tod_statistical_test_for_period(epl_tables_df)
+    stoke_res = run_stoke_statistical_test(epl_tables_df)
 
     print(gd_res)
     print(tod_res)
+    print(stoke_res)
+
+
+def run_stoke_statistical_test(epl_tables_df, late_game_hour_cutoff=16, cold_season_start_month=10,
+                               cold_season_end_month=4):
+    epl_tables_df['fixture_hour'] = epl_tables_df['fixture_date'].apply(lambda date: date.hour)
+    epl_tables_df['fixture_month'] = epl_tables_df['fixture_date'].apply(lambda date: date.month)
+
+    epl_tables_df['late_game'] = epl_tables_df['fixture_hour'] >= late_game_hour_cutoff
+    epl_tables_df['cold_game'] = (epl_tables_df['fixture_month'] >= cold_season_start_month) | \
+                                 (epl_tables_df['fixture_month'] < cold_season_end_month)
+
+    stoke_like = {'Blackburn': True,
+                  'Manchester United': False,
+                  'Chelsea': False,
+                  'Arsenal': False,
+                  'Wolves': False,
+                  'Norwich': False,
+                  'Bolton': True,
+                  'Sunderland': True,
+                  'Aston Villa': False,
+                  'Everton': False,
+                  'Swansea': False,
+                  'QPR': False,
+                  'West Brom': False,
+                  'Stoke City': True,
+                  'Newcastle': True,
+                  'Wigan': True,
+                  'Liverpool': False,
+                  'Fulham': False,
+                  'Manchester City': False,
+                  'Tottenham': False,
+                  'Southampton': False,
+                  'Reading': False,
+                  'West Ham': False,
+                  'Cardiff': False,
+                  'Hull City': True,
+                  'Crystal Palace': False,
+                  'Leicester': False,
+                  'Burnley': True,
+                  'Watford': False,
+                  'Bournemouth': False,
+                  'Middlesbrough': True,
+                  'Brighton': False,
+                  'Huddersfield': True,
+                  'Sheffield Utd': True,
+                  'Leeds': False,
+                  'Brentford': False}
+
+    epl_tables_df['stoke_like_opposition'] = epl_tables_df['opp_team_name'].apply(lambda name: stoke_like[name])
+
+    cold_rainy_nights_at_stoke_df = epl_tables_df.loc[
+        epl_tables_df['cold_game'] &
+        epl_tables_df['late_game'] &
+        epl_tables_df['stoke_like_opposition'] &
+        ~epl_tables_df['home']
+        ]
+
+    control_group = epl_tables_df.loc[
+        ~(epl_tables_df['cold_game'] &
+          epl_tables_df['late_game'] &
+          epl_tables_df['stoke_like_opposition']) &
+        ~epl_tables_df['home']
+        ]
+
+    cold_rainy_nights_outcome = cold_rainy_nights_at_stoke_df.groupby('match_pts').apply(len).tolist()
+    control_game_outcomes = control_group.groupby('match_pts').apply(len).tolist()
+
+    g, p_value, dof, expected = stats.chi2_contingency(
+        np.array([cold_rainy_nights_outcome, control_game_outcomes])
+    )
+
+    return p_value
 
 
 def run_tod_statistical_test_for_period(epl_tables_df, late_game_hour_cutoff=18):
