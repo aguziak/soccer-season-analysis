@@ -1,10 +1,12 @@
 from src.get_season_data import get_season_data, get_team_colors_from_api
-from constants import team_three_letter_codes, team_colors
+from constants import team_colors
 from scipy import stats
+from bokeh.plotting import figure, output_file, show
 
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+import visualizations
 
 
 def draw_plots(round_num: int, total_num_rounds: int, tables_df: pd.DataFrame, bar_graph_ax: plt.Axes,
@@ -136,10 +138,54 @@ def _create_rolling_avg_match_pts(group: pd.DataFrame, period: int):
     return group
 
 
+def validate_tables_df(tables_df: pd.DataFrame):
+    n_rounds = max(tables_df['round'])
+    n_teams = tables_df['team_id'].nunique(dropna=True)
+
+    n_rows_expected = n_rounds * n_teams
+
+    if len(tables_df) != n_rows_expected:
+        return False
+
+    return True
+
+
+def create_multi_season_tables_df(start_year: int, end_year: int, league_id: int, throw_on_invalid=True, use_cache=True):
+    """
+    Gets all the season data for a range of years and return the results as one big DataFrame
+
+    Args:
+        start_year: Start of the range inclusive
+        end_year: End of the range inclusive
+        league_id: Id for the league
+        throw_on_invalid: If true will throw an error if any season data fails validation. If false will omit
+            the data and still return
+        use_cache: Whether or not to prioritize the local cache when getting data
+
+    Returns:
+        DataFrame: Pandas DataFrame with multiple seasons of league table data
+
+    """
+    multi_season_table_df = pd.DataFrame()
+
+    for year in range(start_year, end_year + 1):
+        season_df = create_tables_df(get_season_data(season=year, league_id=league_id, use_cache=use_cache))
+        is_season_valid = validate_tables_df(season_df)
+        if not is_season_valid and throw_on_invalid:
+            raise RuntimeError(f'Season {year} league {league_id} failed validation!')
+        elif is_season_valid:
+            multi_season_table_df = pd.concat([multi_season_table_df, season_df])
+
+    return multi_season_table_df.reset_index(drop=True)
+
+
 def perform_analysis():
     epl_league_id = 39
-    epl_matches_df = get_season_data(season=2019, league_id=epl_league_id, use_cache=True)
+    epl_matches_df = get_season_data(season=2012, league_id=epl_league_id, use_cache=True)
     epl_tables_df = create_tables_df(epl_matches_df)
+
+    is_tables_df_valid = validate_tables_df(epl_tables_df)
+
     epl_tables_df = epl_tables_df.groupby('team_id').apply(_create_rolling_avg_match_pts, period=3)
 
     epl_tables_df['3_match_ppg_diff'] = epl_tables_df['prev_3_match_ppg_avg'] - epl_tables_df['next_3_match_ppg_avg']
@@ -152,6 +198,8 @@ def perform_analysis():
 
     epl_tables_df['big_win'] = epl_tables_df['match_gd_full'] >= big_win_goal_diff_thresh
     epl_tables_df['bad_loss'] = epl_tables_df['match_gd_full'] <= -big_win_goal_diff_thresh
+
+    show(visualizations.create_bokeh_plot_for_round(tables_df=epl_tables_df, round_num=2))
 
     big_win_group = epl_tables_df.loc[epl_tables_df['big_win']]
     bad_loss_group = epl_tables_df.loc[epl_tables_df['bad_loss']]
