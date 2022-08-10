@@ -1,7 +1,7 @@
 from src.get_season_data import get_season_data, get_team_colors_from_api
 from constants import team_colors
 from scipy import stats
-from bokeh.plotting import figure, output_file, show
+from bokeh.plotting import show
 
 import pandas as pd
 import numpy as np
@@ -181,13 +181,10 @@ def create_multi_season_tables_df(start_year: int, end_year: int, league_id: int
 
 def perform_analysis():
     epl_league_id = 39
-    epl_matches_df = get_season_data(season=2012, league_id=epl_league_id, use_cache=True)
-    epl_tables_df = create_tables_df(epl_matches_df)
+    epl_tables_df = create_multi_season_tables_df(2018, 2020, epl_league_id)
 
-    is_tables_df_valid = validate_tables_df(epl_tables_df)
-
-    epl_tables_df = epl_tables_df.groupby('team_id').apply(_create_rolling_avg_match_pts, period=3)
-
+    epl_tables_df = epl_tables_df.groupby(by=['league_season', 'team_id']).apply(_create_rolling_avg_match_pts, period=3)
+    epl_tables_df = epl_tables_df.dropna()
     epl_tables_df['3_match_ppg_diff'] = epl_tables_df['prev_3_match_ppg_avg'] - epl_tables_df['next_3_match_ppg_avg']
 
     winning_goal_diff_series = epl_tables_df.loc[epl_tables_df['match_win']]['match_gd_full']
@@ -214,7 +211,6 @@ def perform_analysis():
     fig: plt.Figure
     ax: plt.Axes
 
-    # ax.hist(epl_tables_df['next_3_match_ppg_avg'], bins=10)
     ax.hist(big_win_group['3_match_ppg_diff'], bins=10)
     ax.hist(bad_loss_group['3_match_ppg_diff'], bins=10)
 
