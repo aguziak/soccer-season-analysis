@@ -150,7 +150,8 @@ def validate_tables_df(tables_df: pd.DataFrame):
     return True
 
 
-def create_multi_season_tables_df(start_year: int, end_year: int, league_id: int, throw_on_invalid=True, use_cache=True):
+def create_multi_season_tables_df(start_year: int, end_year: int, league_id: int, throw_on_invalid=True,
+                                  use_cache=True):
     """
     Gets all the season data for a range of years and return the results as one big DataFrame
 
@@ -181,40 +182,42 @@ def create_multi_season_tables_df(start_year: int, end_year: int, league_id: int
 
 def perform_analysis():
     epl_league_id = 39
-    epl_tables_df = create_multi_season_tables_df(2018, 2020, epl_league_id)
+    epl_tables_df = create_multi_season_tables_df(2011, 2021, epl_league_id)
 
-    epl_tables_df = epl_tables_df.groupby(by=['league_season', 'team_id']).apply(_create_rolling_avg_match_pts, period=3)
+    res = {period_length: run_statistical_test_for_period(epl_tables_df, period=period_length)
+           for period_length in range(3, 11)}
+
+    print(res)
+
+
+def run_statistical_test_for_period(epl_tables_df, period=3):
+    epl_tables_df = epl_tables_df.groupby(by=['league_season', 'team_id']).apply(_create_rolling_avg_match_pts,
+                                                                                 period=period)
     epl_tables_df = epl_tables_df.dropna()
-    epl_tables_df['3_match_ppg_diff'] = epl_tables_df['prev_3_match_ppg_avg'] - epl_tables_df['next_3_match_ppg_avg']
+    epl_tables_df[f'{period}_match_ppg_diff'] = \
+        epl_tables_df[f'prev_{period}_match_ppg_avg'] - epl_tables_df[f'next_{period}_match_ppg_avg']
 
     winning_goal_diff_series = epl_tables_df.loc[epl_tables_df['match_win']]['match_gd_full']
     mean_winning_gd = winning_goal_diff_series.mean()
     std_winning_gd = winning_goal_diff_series.std()
 
-    big_win_goal_diff_thresh = np.round(mean_winning_gd + std_winning_gd)
+    big_win_goal_diff_thresh = np.round(mean_winning_gd + 2 * std_winning_gd)
 
     epl_tables_df['big_win'] = epl_tables_df['match_gd_full'] >= big_win_goal_diff_thresh
     epl_tables_df['bad_loss'] = epl_tables_df['match_gd_full'] <= -big_win_goal_diff_thresh
-
-    show(visualizations.create_bokeh_plot_for_round(tables_df=epl_tables_df, round_num=2))
 
     big_win_group = epl_tables_df.loc[epl_tables_df['big_win']]
     bad_loss_group = epl_tables_df.loc[epl_tables_df['bad_loss']]
     control_group = epl_tables_df.loc[(~epl_tables_df['big_win']) & (~epl_tables_df['bad_loss'])]
 
-    kw_h_stat, p_value = stats.kruskal(bad_loss_group['3_match_ppg_diff'],
-                                       control_group['3_match_ppg_diff'],
-                                       nan_policy='omit')
+    _, bad_loss_p_value = stats.mannwhitneyu(bad_loss_group[f'{period}_match_ppg_diff'],
+                                             control_group[f'{period}_match_ppg_diff'],
+                                             nan_policy='omit')
+    _, big_win_p_value = stats.mannwhitneyu(big_win_group[f'{period}_match_ppg_diff'],
+                                            control_group[f'{period}_match_ppg_diff'],
+                                            nan_policy='omit')
 
-    fig, ax = plt.subplots()
-
-    fig: plt.Figure
-    ax: plt.Axes
-
-    ax.hist(big_win_group['3_match_ppg_diff'], bins=10)
-    ax.hist(bad_loss_group['3_match_ppg_diff'], bins=10)
-
-    plt.show()
+    return (len(bad_loss_group), bad_loss_p_value), (len(big_win_group), big_win_p_value)
 
 
 if __name__ == '__main__':
