@@ -7,6 +7,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 import datetime
 
+import src.visualizations
+
 
 def draw_plots(round_num: int, total_num_rounds: int, tables_df: pd.DataFrame, bar_graph_ax: plt.Axes,
                line_graph_ax: plt.Axes):
@@ -175,12 +177,25 @@ def create_multi_season_tables_df(start_year: int, end_year: int, league_id: int
     multi_season_table_df = pd.DataFrame()
 
     for year in range(start_year, end_year + 1):
-        season_df = create_tables_df(get_season_data(season=year, league_id=league_id, use_cache=use_cache))
-        is_season_valid = validate_tables_df(season_df)
+        current_season_df = create_tables_df(get_season_data(season=year, league_id=league_id, use_cache=use_cache))
+        is_season_valid = validate_tables_df(current_season_df)
         if not is_season_valid and throw_on_invalid:
             raise RuntimeError(f'Season {year} league {league_id} failed validation!')
         elif is_season_valid:
-            multi_season_table_df = pd.concat([multi_season_table_df, season_df])
+            multi_season_table_df = pd.concat([multi_season_table_df, current_season_df])
+
+    def create_final_position_column(season_df: pd.DataFrame):
+        final_round_df = season_df.loc[season_df['round'] == max(season_df['round'])] \
+            .sort_values(by=['pts', 'gd_full'], ascending=True)
+        final_round_df['final_position'] = final_round_df['pts'].rank(method='first').astype(int)
+        final_round_df = final_round_df.reset_index(drop=True)
+
+        season_df = season_df.reset_index(drop=True)
+        season_df = season_df.merge(final_round_df[['team_id', 'final_position']], on='team_id')
+
+        return season_df
+
+    multi_season_table_df = multi_season_table_df.groupby('league_season').apply(create_final_position_column)
 
     return multi_season_table_df.reset_index(drop=True)
 
@@ -188,6 +203,8 @@ def create_multi_season_tables_df(start_year: int, end_year: int, league_id: int
 def perform_analysis():
     epl_league_id = 39
     epl_tables_df = create_multi_season_tables_df(2011, 2021, epl_league_id)
+
+    src.visualizations.create_bokeh_plot_for_round(epl_tables_df, 1)
 
     gd_res = {period_length: run_gd_statistical_test_for_period(epl_tables_df, period=period_length, by_team=True)
               for period_length in range(3, 11)}
