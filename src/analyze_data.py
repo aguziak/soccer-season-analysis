@@ -204,7 +204,15 @@ def perform_analysis():
     epl_league_id = 39
     epl_tables_df = create_multi_season_tables_df(2011, 2021, epl_league_id)
 
-    src.visualizations.create_bokeh_plot_for_round(epl_tables_df, 1)
+    # src.visualizations.create_bokeh_plot_for_round(epl_tables_df, 1)
+
+    metric_test_range = range(3, 11)
+
+    gd_res_by_team = pd.concat([run_gd_statistical_test_for_period(epl_tables_df, period=period_length, by_team=True)
+                                for period_length in metric_test_range], axis=0).dropna().reset_index(drop=True)
+    n_teams = len(gd_res_by_team['team_name'].unique())
+
+    team_dfs = [group for group in gd_res_by_team.groupby(by=['team_name'])]
 
     gd_res = {period_length: run_gd_statistical_test_for_period(epl_tables_df, period=period_length, by_team=True)
               for period_length in range(3, 11)}
@@ -322,8 +330,9 @@ def run_gd_statistical_test_for_period(epl_tables_df, period=3, by_team=False, b
     epl_tables_df['big_win'] = epl_tables_df['match_gd_full'] >= big_win_goal_diff_thresh
     epl_tables_df['bad_loss'] = epl_tables_df['match_gd_full'] <= -big_win_goal_diff_thresh
 
+    results_df = pd.DataFrame()
+
     if by_team:
-        res = dict()
         for team_name in epl_tables_df['team_name'].unique():
             big_win_group = epl_tables_df.loc[epl_tables_df['big_win'] & (epl_tables_df['team_name'] == team_name)]
             bad_loss_group = epl_tables_df.loc[
@@ -334,35 +343,45 @@ def run_gd_statistical_test_for_period(epl_tables_df, period=3, by_team=False, b
 
             if len(bad_loss_group) != 0:
                 _, bad_loss_p_value = stats.mannwhitneyu(bad_loss_group[f'{period}_match_ppg_diff'],
-                                                         control_group[f'{period}_match_ppg_diff'],
-                                                         nan_policy='omit')
+                                                         control_group[f'{period}_match_ppg_diff'])
             else:
                 bad_loss_p_value = np.nan
 
             if len(big_win_group) != 0:
                 _, big_win_p_value = stats.mannwhitneyu(big_win_group[f'{period}_match_ppg_diff'],
-                                                        control_group[f'{period}_match_ppg_diff'],
-                                                        nan_policy='omit')
+                                                        control_group[f'{period}_match_ppg_diff'])
             else:
                 big_win_p_value = np.nan
 
-            res.update(
-                {team_name: ((len(bad_loss_group), bad_loss_p_value), (len(big_win_group), big_win_p_value))})
+            results_df = pd.concat([results_df, pd.Series({
+                'team_name': team_name,
+                'period': period,
+                'bad_loss_n': len(bad_loss_group),
+                'bad_loss_p_value': bad_loss_p_value,
+                'big_win_n': len(big_win_group),
+                'big_win_p_value': big_win_p_value
+            })], axis=1)
 
-        return res
+        return results_df.transpose()
     else:
         big_win_group = epl_tables_df.loc[epl_tables_df['big_win']]
         bad_loss_group = epl_tables_df.loc[epl_tables_df['bad_loss']]
         control_group = epl_tables_df.loc[(~epl_tables_df['big_win']) & (~epl_tables_df['bad_loss'])]
 
         _, bad_loss_p_value = stats.mannwhitneyu(bad_loss_group[f'{period}_match_ppg_diff'],
-                                                 control_group[f'{period}_match_ppg_diff'],
-                                                 nan_policy='omit')
+                                                 control_group[f'{period}_match_ppg_diff'])
         _, big_win_p_value = stats.mannwhitneyu(big_win_group[f'{period}_match_ppg_diff'],
-                                                control_group[f'{period}_match_ppg_diff'],
-                                                nan_policy='omit')
+                                                control_group[f'{period}_match_ppg_diff'])
 
-        return (len(bad_loss_group), bad_loss_p_value), (len(big_win_group), big_win_p_value)
+        results_df = pd.Series({
+            'period': period,
+            'bad_loss_n': len(bad_loss_group),
+            'bad_loss_p_value': bad_loss_p_value,
+            'big_win_n': len(big_win_group),
+            'big_win_p_value': big_win_p_value
+        }).to_frame()
+
+        return results_df
 
 
 if __name__ == '__main__':
