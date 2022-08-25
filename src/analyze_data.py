@@ -210,9 +210,7 @@ def perform_analysis():
 
     gd_res_by_team = pd.concat([run_gd_statistical_test_for_period(epl_tables_df, period=period_length, by_team=True)
                                 for period_length in metric_test_range], axis=0).dropna().reset_index(drop=True)
-    n_teams = len(gd_res_by_team['team_name'].unique())
-
-    team_dfs = [group for group in gd_res_by_team.groupby(by=['team_name'])]
+    tod_test_result = run_tod_statistical_test_for_period(epl_tables_df)
 
     gd_res = {period_length: run_gd_statistical_test_for_period(epl_tables_df, period=period_length, by_team=True)
               for period_length in range(3, 11)}
@@ -289,18 +287,18 @@ def run_stoke_statistical_test(epl_tables_df, late_game_hour_cutoff=16, cold_sea
     cold_rainy_nights_outcome = cold_rainy_nights_at_stoke_df.groupby('match_pts').apply(len).tolist()
     control_game_outcomes = control_group.groupby('match_pts').apply(len).tolist()
 
-    g, p_value, dof, expected = stats.chi2_contingency(
+    chi2, p_value, dof, expected = stats.chi2_contingency(
         np.array([cold_rainy_nights_outcome, control_game_outcomes])
     )
 
-    return p_value
+    return chi2, p_value
 
 
 def run_tod_statistical_test_for_period(epl_tables_df, late_game_hour_cutoff=18):
     epl_tables_df['fixture_hour'] = epl_tables_df['fixture_date'].apply(lambda date: date.hour)
     epl_tables_df['late_game'] = epl_tables_df['fixture_hour'] >= late_game_hour_cutoff
 
-    res = dict()
+    result_df = pd.DataFrame()
     for team_name in epl_tables_df['team_name'].unique():
         late_game_group = epl_tables_df.loc[epl_tables_df['late_game'] & (epl_tables_df['team_name'] == team_name)]
         control_group = epl_tables_df.loc[(~epl_tables_df['late_game']) & (epl_tables_df['team_name'] == team_name)]
@@ -315,9 +313,13 @@ def run_tod_statistical_test_for_period(epl_tables_df, late_game_hour_cutoff=18)
         else:
             p_value = np.nan
 
-        res.update({team_name: (len(late_game_group), p_value)})
+        result_df = pd.concat([result_df, pd.Series({
+            'team_name': team_name,
+            'n': len(late_game_group),
+            'p_value': p_value
+        })], axis=1)
 
-    return res
+    return result_df.transpose().sort_values(by='p_value')
 
 
 def run_gd_statistical_test_for_period(epl_tables_df, period=3, by_team=False, big_win_goal_diff_thresh=4):
